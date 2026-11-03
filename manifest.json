@@ -1,7 +1,8 @@
 {
   "name": "Group Unified Video Player",
   "short_name": "VideoPlayer",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#121212",
   "theme_color": "#121212",
@@ -13,7 +14,7 @@
     }
   ],
   "share_target": {
-    "action": "/index.html",
+    "action": "./index.html",
     "method": "GET",
     "params": {
       "title": "title",
