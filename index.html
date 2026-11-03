@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unified Video Player</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { background: #121212; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+        .player-container { width: 100%; max-width: 800px; margin: 20px auto; aspect-ratio: 16/9; background: #000; }
+        iframe, video { width: 100%; height: 100%; border: none; }
+    </style>
+</head>
+<body>
+    <h2>Group Media Sync</h2>
+    <div class="player-container" id="player">
+        <p style="padding: 40px;">Paste a video link or share a link to this app to play.</p>
+    </div>
+
+    <script>
+        // 1. Register the Service Worker so it's installable as a PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        // 2. Catch the incoming link shared from WhatsApp
+        const parsedUrl = new URL(window.location.href);
+        // Android often passes the URL inside the 'text' parameter or the 'url' parameter
+        const sharedUrl = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('text');
+
+        if (sharedUrl) {
+            const container = document.getElementById('player');
+            
+            // Handle YouTube Links
+            if (sharedUrl.includes('youtube.com') || sharedUrl.includes('youtu.be')) {
+                let videoId = '';
+                if (sharedUrl.includes('youtu.be/')) {
+                    videoId = sharedUrl.split('youtu.be/')[1].split(/[?#]/)[0];
+                } else {
+                    videoId = parsedUrl.searchParams.get('v') || sharedUrl.split('v=')[1]?.split('&')[0];
+                }
+                container.innerHTML = `<iframe src="https://youtube.com{videoId}" allowfullscreen></iframe>`;
+            } 
+            // Handle Twitter/X or Instagram Videos
+            // (Note: To strictly stream raw mp4s from X/Insta without wrappers, you may need a free CORS proxy or widget API)
+            else if (sharedUrl.includes('instagram.com') || sharedUrl.includes('x.com')) {
+                container.innerHTML = `<iframe src="${sharedUrl}" allowfullscreen></iframe>`;
+            }
+            // Standard raw video file links
+            else {
+                container.innerHTML = `<video src="${sharedUrl}" controls autoplay></video>`;
+            }
+        }
+    </script>
+</body>
+</html>
