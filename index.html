@@ -7,50 +7,86 @@
     <link rel="manifest" href="manifest.json">
     <style>
         body { background: #121212; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
-        .player-container { width: 100%; max-width: 800px; margin: 20px auto; aspect-ratio: 16/9; background: #000; }
+        .input-container { margin: 20px auto; max-width: 600px; display: flex; gap: 10px; }
+        input { flex: 1; padding: 12px; border: 1px solid #333; background: #222; color: #fff; border-radius: 6px; font-size: 16px; }
+        button { padding: 12px 20px; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .player-container { width: 100%; max-width: 800px; margin: 20px auto; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; }
         iframe, video { width: 100%; height: 100%; border: none; }
     </style>
 </head>
 <body>
     <h2>Group Media Sync</h2>
+    
+    <!-- Manual Paste Layout -->
+    <div class="input-container">
+        <input type="text" id="linkInput" placeholder="Paste YouTube, X, or Insta link here...">
+        <button onclick="handleManualPaste()">Play</button>
+    </div>
+
     <div class="player-container" id="player">
-        <p style="padding: 40px;">Paste a video link or share a link to this app to play.</p>
+        <p style="padding: 40px; color: #aaa;">Paste a video link above or share a link directly from WhatsApp.</p>
     </div>
 
     <script>
-        // 1. Register the Service Worker so it's installable as a PWA
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js');
         }
 
-        // 2. Catch the incoming link shared from WhatsApp
-        const parsedUrl = new URL(window.location.href);
-        // Android often passes the URL inside the 'text' parameter or the 'url' parameter
-        const sharedUrl = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('text');
-
-        if (sharedUrl) {
+        // Core Player Engine
+        function loadVideo(url) {
+            if (!url) return;
             const container = document.getElementById('player');
-            
-            // Handle YouTube Links
-            if (sharedUrl.includes('youtube.com') || sharedUrl.includes('youtu.be')) {
+            let cleanUrl = url.trim();
+
+            // Extract YouTube ID safely
+            if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
                 let videoId = '';
-                if (sharedUrl.includes('youtu.be/')) {
-                    videoId = sharedUrl.split('youtu.be/')[1].split(/[?#]/)[0];
+                if (cleanUrl.includes('youtu.be/')) {
+                    videoId = cleanUrl.split('youtu.be/')[1].split(/[?#]/)[0];
                 } else {
-                    videoId = parsedUrl.searchParams.get('v') || sharedUrl.split('v=')[1]?.split('&')[0];
+                    const urlParams = new URLSearchParams(new URL(cleanUrl).search);
+                    videoId = urlParams.get('v');
+                    if (!videoId && cleanUrl.includes('://youtube.com')) {
+                        videoId = cleanUrl.split('shorts/')[1].split(/[?#]/)[0];
+                    }
                 }
-                container.innerHTML = `<iframe src="https://youtube.com{videoId}" allowfullscreen></iframe>`;
+                if (videoId) {
+                    container.innerHTML = `<iframe src="https://youtube.com{videoId}?autoplay=1" allow="autoplay;讲fullscreen" allowfullscreen></iframe>`;
+                    return;
+                }
             } 
-            // Handle Twitter/X or Instagram Videos
-            // (Note: To strictly stream raw mp4s from X/Insta without wrappers, you may need a free CORS proxy or widget API)
-            else if (sharedUrl.includes('instagram.com') || sharedUrl.includes('x.com')) {
-                container.innerHTML = `<iframe src="${sharedUrl}" allowfullscreen></iframe>`;
+            
+            // X (Twitter) & Instagram Fallback wrapper
+            if (cleanUrl.includes('instagram.com') || cleanUrl.includes('x.com') || cleanUrl.includes('twitter.com')) {
+                container.innerHTML = `<iframe src="${cleanUrl}" allowfullscreen></iframe>`;
+                return;
             }
-            // Standard raw video file links
-            else {
-                container.innerHTML = `<video src="${sharedUrl}" controls autoplay></video>`;
-            }
+
+            // Raw MP4 or external video URLs
+            container.innerHTML = `<video src="${cleanUrl}" controls autoplay style="width:100%; height:100%;"></video>`;
         }
+
+        // Trigger on Manual Button Press/Paste
+        function handleManualPaste() {
+            const inputVal = document.getElementById('linkInput').value;
+            loadVideo(inputVal);
+        }
+
+        // Process incoming links shared natively from Android Share sheet
+        window.addEventListener('DOMContentLoaded', () => {
+            const parsedUrl = new URL(window.location.href);
+            const sharedUrl = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('text');
+            
+            if (sharedUrl) {
+                // Sometimes Android passes extra text along with the link. Extract just the URL.
+                const urlMatch = sharedUrl.match(/\bhttps?:\/\/\S+/gi);
+                if (urlMatch) {
+                    document.getElementById('linkInput').value = urlMatch[0];
+                    loadVideo(urlMatch[0]);
+                }
+            }
+        });
     </script>
 </body>
 </html>
