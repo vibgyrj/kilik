@@ -7,112 +7,159 @@
     <link rel="manifest" href="manifest.json">
     <style>
         body { background: #121212; color: #fff; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
-        .input-container { margin: 20px auto; max-width: 600px; display: flex; gap: 10px; }
-        input { flex: 1; padding: 12px; border: 1px solid #333; background: #222; color: #fff; border-radius: 6px; font-size: 16px; }
-        button { padding: 12px 20px; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        .player-container { width: 100%; max-width: 800px; margin: 20px auto; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-        iframe, video { width: 100%; height: 100%; border: none; }
-        #debug { color: #888; font-size: 12px; margin-top: 10px; }
+        .input-container { margin: 20px auto; max-width: 600px; }
+        input { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid #333; background: #222; color: #fff; border-radius: 6px; font-size: 16px; }
+        .player-container { width: 100%; max-width: 800px; margin: 20px auto; background: #000; border-radius: 8px; overflow: hidden; }
+        .player-container:empty { display: none; }
+        .player-container video { display: block; width: 100%; height: auto; max-height: 80vh; object-fit: contain; }
+        .youtube-frame { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }
+        .twitter-tweet { margin: 0 auto !important; }
+        #debug { color: #888; font-size: 12px; margin-top: 10px; overflow-wrap: anywhere; }
     </style>
 </head>
 <body>
     <h2>Group Media Sync</h2>
     
     <div class="input-container">
-        <input type="text" id="linkInput" placeholder="Paste YouTube, X, or Insta link here...">
-        <button onclick="handleManualPaste()">Play</button>
+        <input type="text" id="linkInput" placeholder="Paste YouTube, X, or Insta link here..." aria-label="Video or post link">
     </div>
 
-    <div class="player-container" id="player">
-        <p id="status" style="padding: 40px; color: #aaa;">Paste a video link above or share a link directly from WhatsApp.</p>
-    </div>
-    <div id="debug"></div>
+    <div class="player-container" id="player"></div>
+    <div id="debug" aria-live="polite"></div>
 
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js');
         }
 
-        function getYouTubeVideoId(value) {
-            let parsed;
+        function parseUrl(value) {
             try {
-                parsed = new URL(value);
+                return new URL(value.trim());
             } catch {
-                return '';
+                return null;
             }
+        }
 
+        function getYouTubeVideoId(parsed) {
             const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
             if (host === 'youtu.be') {
-                const parts = parsed.pathname.split('/').filter(Boolean);
-                return parts[0] || '';
+                return parsed.pathname.split('/').filter(Boolean)[0] || '';
             }
-            if (host !== 'youtube.com' && host !== 'm.youtube.com' && host !== 'youtube-nocookie.com') {
+            if (!['youtube.com', 'm.youtube.com', 'youtube-nocookie.com'].includes(host)) {
                 return '';
             }
-
             if (parsed.pathname === '/watch') {
                 return parsed.searchParams.get('v') || '';
             }
-
-            const pathMatch = parsed.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/?]+)/);
-            return pathMatch ? pathMatch[1] : '';
+            const match = parsed.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/?]+)/);
+            return match ? match[1] : '';
         }
 
-        function loadVideo(url) {
-            if (!url) return;
+        function getTwitterWidgets() {
+            if (window.twttr && window.twttr.widgets) {
+                return Promise.resolve(window.twttr);
+            }
+            if (window.twitterWidgetsPromise) {
+                return window.twitterWidgetsPromise;
+            }
+
+            window.twitterWidgetsPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://platform.twitter.com/widgets.js';
+                script.async = true;
+                script.onload = () => window.twttr && window.twttr.widgets
+                    ? resolve(window.twttr)
+                    : reject(new Error('X embed tools did not load'));
+                script.onerror = () => reject(new Error('Could not load X embed tools'));
+                document.head.appendChild(script);
+            });
+            return window.twitterWidgetsPromise;
+        }
+
+        function loadVideo(value) {
+            const parsed = parseUrl(value);
+            if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) return;
+
             const container = document.getElementById('player');
             const debugLog = document.getElementById('debug');
-            const cleanUrl = url.trim();
-            const videoId = getYouTubeVideoId(cleanUrl);
-
-            debugLog.innerText = "Processing URL: " + cleanUrl;
+            const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+            const videoId = getYouTubeVideoId(parsed);
+            container.replaceChildren();
 
             if (videoId && /^[\w-]{11}$/.test(videoId)) {
-                debugLog.innerText = "Found YouTube ID: " + videoId;
+                debugLog.innerText = 'Loading YouTube video...';
                 const iframe = document.createElement('iframe');
-                iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1`;
+                iframe.className = 'youtube-frame';
+                iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&playsinline=1`;
                 iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen; web-share';
                 iframe.allowFullscreen = true;
                 iframe.title = 'YouTube video player';
-                container.replaceChildren(iframe);
-                return;
-            }
-            
-            if (cleanUrl.includes('instagram.com') || cleanUrl.includes('x.com') || cleanUrl.includes('twitter.com')) {
-                debugLog.innerText = "Loading social media iframe...";
-                const iframe = document.createElement('iframe');
-                iframe.src = cleanUrl;
-                iframe.allowFullscreen = true;
-                container.replaceChildren(iframe);
+                container.appendChild(iframe);
                 return;
             }
 
-            debugLog.innerText = "Playing direct video source...";
+            if (host === 'x.com' || host === 'twitter.com' || host === 'mobile.twitter.com') {
+                const status = parsed.pathname.match(/\/status(?:es)?\/(\d+)/i);
+                if (!status) {
+                    debugLog.innerText = 'This X link is not a post with an embeddable status.';
+                    return;
+                }
+
+                debugLog.innerText = 'Loading X post and video...';
+                const quote = document.createElement('blockquote');
+                quote.className = 'twitter-tweet';
+                const link = document.createElement('a');
+                link.href = `https://twitter.com/i/status/${status[1]}`;
+                link.textContent = 'View this post on X';
+                quote.appendChild(link);
+                container.appendChild(quote);
+
+                getTwitterWidgets()
+                    .then(twttr => twttr.widgets.load(container))
+                    .then(() => { debugLog.innerText = ''; })
+                    .catch(error => { debugLog.innerText = `${error.message}. Open the post on X to watch its video.`; });
+                return;
+            }
+
+            if (host === 'instagram.com' || host === 'www.instagram.com') {
+                debugLog.innerText = 'Instagram posts need Instagram’s embed player and may not play in this page.';
+                const link = document.createElement('a');
+                link.href = parsed.href;
+                link.textContent = 'Open post on Instagram';
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                container.appendChild(link);
+                return;
+            }
+
+            debugLog.innerText = 'Playing direct video source...';
             const video = document.createElement('video');
-            video.src = cleanUrl;
+            video.src = parsed.href;
             video.controls = true;
             video.autoplay = true;
             video.playsInline = true;
-            container.replaceChildren(video);
+            container.appendChild(video);
         }
 
-        function handleManualPaste() {
-            const inputVal = document.getElementById('linkInput').value;
-            loadVideo(inputVal);
+        function findSharedUrl(value) {
+            const match = value.match(/https?:\/\/[^\s<>"']+/i);
+            return match ? match[0].replace(/[),.!?]+$/, '') : '';
         }
+
+        const input = document.getElementById('linkInput');
+        let inputTimer;
+        input.addEventListener('input', () => {
+            clearTimeout(inputTimer);
+            inputTimer = setTimeout(() => loadVideo(input.value), 500);
+        });
 
         window.addEventListener('DOMContentLoaded', () => {
-            const parsedUrl = new URL(window.location.href);
-            const sharedUrl = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('text');
-            
+            const pageUrl = new URL(window.location.href);
+            const sharedText = pageUrl.searchParams.get('url') || pageUrl.searchParams.get('text') || '';
+            const sharedUrl = findSharedUrl(sharedText);
             if (sharedUrl) {
-                const urlMatch = sharedUrl.match(/https?:\/\/[^\s]+/i);
-                if (urlMatch && urlMatch[0]) {
-                    const cleanedSharedUrl = urlMatch[0].replace(/[),.!?]+$/, '');
-                    document.getElementById('linkInput').value = cleanedSharedUrl;
-                    loadVideo(cleanedSharedUrl);
-                }
+                input.value = sharedUrl;
+                loadVideo(sharedUrl);
             }
         });
     </script>
