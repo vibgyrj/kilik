@@ -18,7 +18,6 @@
 <body>
     <h2>Group Media Sync</h2>
     
-    <!-- Manual Paste Layout -->
     <div class="input-container">
         <input type="text" id="linkInput" placeholder="Paste YouTube, X, or Insta link here...">
         <button onclick="handleManualPaste()">Play</button>
@@ -33,53 +32,62 @@
             navigator.serviceWorker.register('sw.js');
         }
 
-        // Core Player Engine
         function loadVideo(url) {
             if (!url) return;
             const container = document.getElementById('player');
             let cleanUrl = url.trim();
+            let videoId = '';
 
-            // Extract YouTube ID safely
-            if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
-                let videoId = '';
-                if (cleanUrl.includes('youtu.be/')) {
-                    videoId = cleanUrl.split('youtu.be/')[1].split(/[?#]/)[0];
-                } else {
-                    const urlParams = new URLSearchParams(new URL(cleanUrl).search);
-                    videoId = urlParams.get('v');
-                    if (!videoId && cleanUrl.includes('://youtube.com')) {
-                        videoId = cleanUrl.split('shorts/')[1].split(/[?#]/)[0];
-                    }
-                }
-                if (videoId) {
-                    container.innerHTML = `<iframe src="https://youtube.com{videoId}?autoplay=1" allow="autoplay;讲fullscreen" allowfullscreen></iframe>`;
-                    return;
+            // 1. Handle YouTube Shortened Share Links (youtu.be/abc)
+            if (cleanUrl.includes('youtu.be/')) {
+                const parts = cleanUrl.split('youtu.be/');
+                if (parts[1]) {
+                    videoId = parts[1].split('?')[0].split('#')[0];
                 }
             } 
+            // 2. Handle YouTube Shorts Links (youtube.com/shorts/abc)
+            else if (cleanUrl.includes('youtube.com/shorts/')) {
+                const parts = cleanUrl.split('shorts/');
+                if (parts[1]) {
+                    videoId = parts[1].split('?')[0].split('#')[0];
+                }
+            }
+            // 3. Handle Standard Desktop YouTube Links (://youtube.com)
+            else if (cleanUrl.includes('youtube.com')) {
+                try {
+                    const urlParams = new URLSearchParams(new URL(cleanUrl).search);
+                    videoId = urlParams.get('v');
+                } catch(e) {
+                    console.error("URL Parsing failed", e);
+                }
+            }
+
+            // If we found a valid YouTube ID, render the clean iframe
+            if (videoId) {
+                container.innerHTML = `<iframe src="https://youtube.com{videoId}?autoplay=1" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+                return;
+            }
             
-            // X (Twitter) & Instagram Fallback wrapper
+            // Fallback for Instagram & Twitter (X) links
             if (cleanUrl.includes('instagram.com') || cleanUrl.includes('x.com') || cleanUrl.includes('twitter.com')) {
                 container.innerHTML = `<iframe src="${cleanUrl}" allowfullscreen></iframe>`;
                 return;
             }
 
-            // Raw MP4 or external video URLs
+            // Direct Video links (mp4, webm)
             container.innerHTML = `<video src="${cleanUrl}" controls autoplay style="width:100%; height:100%;"></video>`;
         }
 
-        // Trigger on Manual Button Press/Paste
         function handleManualPaste() {
             const inputVal = document.getElementById('linkInput').value;
             loadVideo(inputVal);
         }
 
-        // Process incoming links shared natively from Android Share sheet
         window.addEventListener('DOMContentLoaded', () => {
             const parsedUrl = new URL(window.location.href);
             const sharedUrl = parsedUrl.searchParams.get('url') || parsedUrl.searchParams.get('text');
             
             if (sharedUrl) {
-                // Sometimes Android passes extra text along with the link. Extract just the URL.
                 const urlMatch = sharedUrl.match(/\bhttps?:\/\/\S+/gi);
                 if (urlMatch) {
                     document.getElementById('linkInput').value = urlMatch[0];
