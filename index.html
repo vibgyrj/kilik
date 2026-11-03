@@ -15,6 +15,7 @@
         .youtube-frame { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }
         .twitter-tweet { margin: 0 auto !important; }
         #debug { color: #888; font-size: 12px; margin-top: 10px; overflow-wrap: anywhere; }
+        #debug a { color: #8ab4f8; }
     </style>
 </head>
 <body>
@@ -76,6 +77,36 @@
             return window.twitterWidgetsPromise;
         }
 
+        function showXFallback(container, statusId, message) {
+            const link = document.createElement('a');
+            link.href = `https://x.com/i/status/${statusId}`;
+            link.textContent = 'Open this post on X';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            container.replaceChildren(link);
+            document.getElementById('debug').innerText = message;
+        }
+
+        async function embedXPost(container, statusId) {
+            const debugLog = document.getElementById('debug');
+            debugLog.innerText = 'Loading X post and video...';
+            try {
+                const twttr = await getTwitterWidgets();
+                const tweet = await twttr.widgets.createTweet(statusId, container, {
+                    align: 'center',
+                    dnt: true,
+                    conversation: 'none'
+                });
+                if (!tweet) {
+                    showXFallback(container, statusId, 'This post is unavailable or cannot be embedded.');
+                    return;
+                }
+                debugLog.innerText = '';
+            } catch (error) {
+                showXFallback(container, statusId, `${error.message}. X may block embeds in this browser or network.`);
+            }
+        }
+
         function loadVideo(value) {
             const parsed = parseUrl(value);
             if (!parsed || !['http:', 'https:'].includes(parsed.protocol)) return;
@@ -85,6 +116,7 @@
             const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
             const videoId = getYouTubeVideoId(parsed);
             container.replaceChildren();
+            debugLog.innerText = '';
 
             if (videoId && /^[\w-]{11}$/.test(videoId)) {
                 debugLog.innerText = 'Loading YouTube video...';
@@ -104,24 +136,11 @@
                     debugLog.innerText = 'This X link is not a post with an embeddable status.';
                     return;
                 }
-
-                debugLog.innerText = 'Loading X post and video...';
-                const quote = document.createElement('blockquote');
-                quote.className = 'twitter-tweet';
-                const link = document.createElement('a');
-                link.href = `https://twitter.com/i/status/${status[1]}`;
-                link.textContent = 'View this post on X';
-                quote.appendChild(link);
-                container.appendChild(quote);
-
-                getTwitterWidgets()
-                    .then(twttr => twttr.widgets.load(container))
-                    .then(() => { debugLog.innerText = ''; })
-                    .catch(error => { debugLog.innerText = `${error.message}. Open the post on X to watch its video.`; });
+                embedXPost(container, status[1]);
                 return;
             }
 
-            if (host === 'instagram.com' || host === 'www.instagram.com') {
+            if (host === 'instagram.com') {
                 debugLog.innerText = 'Instagram posts need Instagram’s embed player and may not play in this page.';
                 const link = document.createElement('a');
                 link.href = parsed.href;
