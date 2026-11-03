@@ -38,43 +38,26 @@
             let cleanUrl = url.trim();
             let videoId = '';
 
-            // 1. Handle YouTube Shortened Share Links (youtu.be/abc)
-            if (cleanUrl.includes('youtu.be/')) {
-                const parts = cleanUrl.split('youtu.be/');
-                if (parts[1]) {
-                    videoId = parts[1].split('?')[0].split('#')[0];
-                }
-            } 
-            // 2. Handle YouTube Shorts Links (youtube.com/shorts/abc)
-            else if (cleanUrl.includes('youtube.com/shorts/')) {
-                const parts = cleanUrl.split('shorts/');
-                if (parts[1]) {
-                    videoId = parts[1].split('?')[0].split('#')[0];
-                }
-            }
-            // 3. Handle Standard Desktop YouTube Links (://youtube.com)
-            else if (cleanUrl.includes('youtube.com')) {
-                try {
-                    const urlParams = new URLSearchParams(new URL(cleanUrl).search);
-                    videoId = urlParams.get('v');
-                } catch(e) {
-                    console.error("URL Parsing failed", e);
+            // Clean fallback to extract YouTube video ID from any format
+            if (cleanUrl.includes('youtu.be/') || cleanUrl.includes('youtube.com')) {
+                // Regex matches standard v=ID, shorts/ID, and youtu.be/ID
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+                const match = cleanUrl.match(regExp);
+                if (match && match[2].length === 11) {
+                    videoId = match[2];
                 }
             }
 
-            // If we found a valid YouTube ID, render the clean iframe
             if (videoId) {
                 container.innerHTML = `<iframe src="https://youtube.com{videoId}?autoplay=1" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
                 return;
             }
             
-            // Fallback for Instagram & Twitter (X) links
             if (cleanUrl.includes('instagram.com') || cleanUrl.includes('x.com') || cleanUrl.includes('twitter.com')) {
                 container.innerHTML = `<iframe src="${cleanUrl}" allowfullscreen></iframe>`;
                 return;
             }
 
-            // Direct Video links (mp4, webm)
             container.innerHTML = `<video src="${cleanUrl}" controls autoplay style="width:100%; height:100%;"></video>`;
         }
 
@@ -89,7 +72,7 @@
             
             if (sharedUrl) {
                 const urlMatch = sharedUrl.match(/\bhttps?:\/\/\S+/gi);
-                if (urlMatch) {
+                if (urlMatch && urlMatch[0]) {
                     document.getElementById('linkInput').value = urlMatch[0];
                     loadVideo(urlMatch[0]);
                 }
